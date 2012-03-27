@@ -266,8 +266,8 @@ int main(int argc, char **argv)
 	}
     }
   
-  save_matrix(A, offset, count, "A");
-  save_matrix(B, offset, count, "B");
+  save_matrix(A, offset, count, "INPUT");
+  save_matrix(B, offset + SIZE * SIZE * sizeof(double), count, "INPUT");
 
   if (rank == 0)
     {
@@ -285,10 +285,10 @@ int main(int argc, char **argv)
 	}
     }
 
-  read_matrix(A, offset, count, "A");
-  read_matrix(B, offset, count, "B");
+  read_matrix(A, offset, count, "INPUT");
+  read_matrix(B, offset + SIZE *SIZE * sizeof(double), count, "INPUT");
   //read_matrix(C, offset, count, "C");  
-  read_matrix(C, 0, SIZE*SIZE, "C");
+  read_matrix(C, 0, SIZE*SIZE, "OUTPUT");
 
   if (rank == 0)
     {

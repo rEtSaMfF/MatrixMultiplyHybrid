@@ -445,8 +445,9 @@ int main(int argc, char * argv[]){
 	*/
 	
 	// initialization from file
-	read_matrix(A, myRank*partitionSize*SIZE*sizeof(double), partitionSize * SIZE, "A");
-	read_matrix(B, myRank*partitionSize*SIZE*sizeof(double), partitionSize * SIZE, "B");
+	read_matrix(A, myRank*partitionSize*SIZE*sizeof(double), partitionSize * SIZE, "INPUT");
+	read_matrix(B, myRank*partitionSize*SIZE*sizeof(double) + SIZE * SIZE * sizeof(double),
+		    partitionSize * SIZE, "INPUT");
 
 	// print_matrix(A, SIZE, partitionSize);
 	// print_matrix(B, partitionSize, SIZE);
@@ -475,8 +476,8 @@ int main(int argc, char * argv[]){
 
 	multiply();
 
-    print_matrix(C, SIZE, partitionSize);
-	save_matrix(C, myRank*partitionSize*SIZE*sizeof(double), partitionSize * SIZE, "C");
+	//print_matrix(C, SIZE, partitionSize);
+	save_matrix(C, myRank*partitionSize*SIZE*sizeof(double), partitionSize * SIZE, "OUTPUT");
 
 	// MPI_Barrier(MPI_COMM_WORLD);
 	// if (myRank == 0)
