@@ -5,8 +5,8 @@
 #include <pthread.h>
 
 
-#define NUMTHREADS 2
-#define SIZE 64 
+#define NUMTHREADS 1
+#define SIZE 8
 
 
 #if defined(__i386__)
@@ -185,10 +185,10 @@ double genrand_res53(void)
 /* END: MT 19937 *******************************************************/
 /***********************************************************************/
 
-double **A=NULL;
+double *A=NULL;
 double *B =NULL;
 double *Bholder = NULL;
-double **C=NULL;
+double *C=NULL;
 double clock_rate=2666700000.0; // change to 700000000.0 for Blue Gene/L
 unsigned int matrix_size=8192;
 int worldSize, myRank, aSize, sendTo;
@@ -214,7 +214,9 @@ void * multiplyRows(void * dealWithRows){
 		for(k = 0; k < partitionSize; k++){
 			for(j = 0; j < SIZE; j++){
 				//Do the multiplication of A and part of B
-				C[i + offset*partitionSize/NUMTHREADS][k + offsetting] += A[i + offset * partitionSize / NUMTHREADS][j] * B[k*SIZE + j];
+				// C[i + offset*partitionSize/NUMTHREADS][k + offsetting] += A[i + offset * partitionSize / NUMTHREADS][j] * B[k*SIZE + j];
+				// C[(i + offset*partitionSize/NUMTHREADS) * SIZE + k + offsetting] += A[(i + offset * partitionSize / NUMTHREADS) * SIZE + j] * B[k*SIZE + j];
+                C[(i + offset*partitionSize/NUMTHREADS) * SIZE + k + offsetting] += A[(i + offset * partitionSize / NUMTHREADS) * SIZE + j] * B[k*SIZE + j];
 			   }
 		} 
 
@@ -344,9 +346,59 @@ void multiply(){
 	free(B);
 }
 
+void save_matrix(double* matrix, int offset, int count, char *filename)
+{
+  MPI_File file;
+  
+  MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_WRONLY|MPI_MODE_CREATE, MPI_INFO_NULL, &file);
+
+  MPI_File_write_at(file, offset, matrix, count, MPI_DOUBLE, MPI_STATUS_IGNORE);
+
+  MPI_File_close(&file);
+}
+
+void read_matrix(double* matrix, int offset, int count, char *filename)
+{
+  
+  MPI_File file;
+  
+  MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &file);
+  
+  MPI_File_read_at(file, offset, matrix, count, MPI_DOUBLE, MPI_STATUS_IGNORE);
+  
+  MPI_File_close(&file);
+  
+}
+
+void print_b(double *mat, int width, int height)
+{
+	int i, j;
+		
+	for (i = 0; i < width; i++)
+	{
+		for (j = 0; j < height; j++)
+			printf("%f ", mat[j * width + i]);
+      printf("\n");
+    }
+  printf("\n");
+}
+
+void print_matrix(double *mat, int width, int height)
+{
+  int i, j;
+  
+  for (i = 0; i < height; i++)
+    {
+      for (j = 0; j < width; j++)
+		printf("%f ", mat[i * width + j]);
+      printf("\n");
+    }
+  printf("\n");
+}
+
 int main(int argc, char * argv[]){
 	//Initialize everything
-	int i, j;
+	// int i, j;
 
 	long long start = rdtsc(), finish;
 	long long execTime, recvMax, recvMin, sendMax, sendMin, sendAv, recvAv, compAv, compMax, compMin;
@@ -355,11 +407,10 @@ int main(int argc, char * argv[]){
 	MPI_Comm_size(MPI_COMM_WORLD, &worldSize);
 	MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
 	
-	rng_init_seeds[0] = myRank;
-	init_by_array(rng_init_seeds, rng_init_length);	
+	// rng_init_seeds[0] = myRank;
+	// init_by_array(rng_init_seeds, rng_init_length);	
 	
 	partitionSize = SIZE / worldSize;
-
 
 	//Correctly get the offset for the block that this process is making
 	
@@ -374,13 +425,13 @@ int main(int argc, char * argv[]){
 
 	aSize = partitionSize;
 
-	A = (double **) calloc(partitionSize,  sizeof(double *));
-	//B is in row-column-major form for easier sending
+	// all matrices are in row-column-major form for easier sending and IO
+	A = (double *) calloc(SIZE * partitionSize, sizeof(double));
 	B = (double *) calloc(SIZE * partitionSize, sizeof(double));
-	C = (double **) calloc(partitionSize, sizeof(double *));
-
+	C = (double *) calloc(SIZE * partitionSize, sizeof(double));
 
 	//Start initilization
+	/*
 	for(i = 0; i < partitionSize; i++){
 		A[i] = (double *) calloc(SIZE, sizeof(double));
 		C[i] = (double *) calloc(SIZE, sizeof(double));
@@ -391,7 +442,15 @@ int main(int argc, char * argv[]){
 			C[i][j] = 0;
 		}
 	}
+	*/
+	
+	// initialization from file
+	read_matrix(A, myRank*partitionSize*SIZE*sizeof(double), partitionSize * SIZE, "A");
+	read_matrix(B, myRank*partitionSize*SIZE*sizeof(double), partitionSize * SIZE, "B");
 
+	// print_matrix(A, SIZE, partitionSize);
+	// print_matrix(B, partitionSize, SIZE);
+    // print_b(B, SIZE, partitionSize);
 
 	/*
 	if(myRank == 0){
@@ -414,9 +473,25 @@ int main(int argc, char * argv[]){
 */
 		//After sending the information we just calculated we can now go into our processing of data recieved
 
-
 	multiply();
 
+    print_matrix(C, SIZE, partitionSize);
+	save_matrix(C, myRank*partitionSize*SIZE*sizeof(double), partitionSize * SIZE, "C");
+
+	// MPI_Barrier(MPI_COMM_WORLD);
+	// if (myRank == 0)
+	// {
+		// printf("before C\n");
+		// C = (double *) calloc(SIZE * SIZE, sizeof(double));
+		// printf("before read_matrix\n");
+		// read_matrix(C, 0, SIZE * SIZE, "C");
+		// printf("before print_matrix\n");
+		// print_matrix(C, SIZE, SIZE);
+		// printf("after print_matrix\n");
+	// }
+	
+	
+		
 	//Check output of C after the multiplication can be uncommented to make sure its correct
 /*	if(myRank == 0){
 		printf("C: \n");
